@@ -22,9 +22,32 @@ def _plan(db: Session, user: User, plan_id: int) -> Plan:
     return plan
 
 
+def progress_of(plan: Plan) -> list[str]:
+    """What the user has done to a plan that a re-plan would discard."""
+    marked = sum(bool(i.outcome) for i in plan.items)
+    kept = sum(i.kind != "meeting" and (i.status == "approved" or i.fixed) for i in plan.items)
+    parts = []
+    if marked:
+        parts.append(f"{marked} marked done or skipped")
+    if kept:
+        parts.append(f"{kept} kept or moved")
+    if plan.review_note:
+        parts.append("your review note")
+    if plan.messages:
+        parts.append("chat edits")
+    return parts
+
+
 @router.post("", response_model=PlanOut, status_code=201)
-def create_plan(background: BackgroundTasks, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    plan = Plan(user_id=user.id, date=tomorrow_for(user), status="gathering")
+def create_plan(background: BackgroundTasks, replace: bool = False, user: User = Depends(current_user),
+                db: Session = Depends(get_db)):
+    day = tomorrow_for(user)
+    existing = db.scalar(select(Plan).where(Plan.user_id == user.id, Plan.date == day, Plan.status == "ready")
+                         .order_by(Plan.id.desc()).limit(1))
+    progress = progress_of(existing) if existing else []
+    if progress and not replace:
+        raise HTTPException(409, f"Tomorrow already has progress ({', '.join(progress)}). Confirm to replace it.")
+    plan = Plan(user_id=user.id, date=day, status="gathering")
     db.add(plan)
     db.commit()
     if get_settings().run_jobs_inline:

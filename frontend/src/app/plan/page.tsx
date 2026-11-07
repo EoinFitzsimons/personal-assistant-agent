@@ -16,6 +16,17 @@ const STATUS_TEXT: Record<string, string> = {
   failed: "Planning failed.",
 };
 
+function progressOf(plan: Plan) {
+  const marked = plan.items.filter((i) => i.outcome).length;
+  const kept = plan.items.filter((i) => i.kind !== "meeting" && (i.status === "approved" || i.fixed)).length;
+  const parts: string[] = [];
+  if (marked) parts.push(`${marked} marked done or skipped`);
+  if (kept) parts.push(`${kept} kept or moved`);
+  if (plan.review_note) parts.push("your review note");
+  if (plan.messages.length) parts.push("chat edits");
+  return parts;
+}
+
 function sourceLine(plan: Plan) {
   const c = plan.summary.counts ?? {};
   const h = plan.summary.health ?? {};
@@ -79,7 +90,12 @@ export default function WeekPage() {
     }
   }
 
-  const start = () => run(async () => setPlan(await api<Plan>("/plans", { method: "POST" })));
+  const [confirming, setConfirming] = useState(false);
+  const start = (replace = false) =>
+    run(async () => {
+      setConfirming(false);
+      setPlan(await api<Plan>(`/plans${replace ? "?replace=true" : ""}`, { method: "POST" }));
+    });
   const patch = (item: PlanItem, body: object) =>
     run(async () =>
       setPlan(await api<Plan>(`/plans/${plan!.id}/items/${item.id}`, { method: "PATCH", body: JSON.stringify(body) })),
@@ -104,6 +120,8 @@ export default function WeekPage() {
   const ready = plan?.status === "ready";
   const proposed = items.filter((i) => i.status === "proposed").length;
 
+  const progress = plan?.status === "ready" && dayLabel(plan.date) === "Tomorrow" ? progressOf(plan) : [];
+  const replan = () => (progress.length ? setConfirming(true) : start());
   const past = history.filter((h) => h.id !== plan?.id && h.status === "ready");
   const busy = plan?.status === "gathering" || plan?.status === "planning";
 
@@ -119,11 +137,24 @@ export default function WeekPage() {
           </div>
           <div className="head-actions">
             {ready && proposed > 0 && <button onClick={approveAll}>Keep all suggestions ({proposed})</button>}
-            <button className="primary" onClick={start} disabled={busy}>
+            <button className="primary" onClick={replan} disabled={busy || confirming}>
               {plan ? "Re-plan tomorrow" : "Plan tomorrow"}
             </button>
           </div>
         </div>
+        {confirming && (
+          <section className="sheet confirm" role="alert">
+            <p>
+              Re-planning replaces tomorrow&apos;s plan. You&apos;ll lose {progress.join(", ")}.
+            </p>
+            <div className="row">
+              <button className="primary" onClick={() => start(true)}>
+                Replace the plan
+              </button>
+              <button onClick={() => setConfirming(false)}>Keep my progress</button>
+            </div>
+          </section>
+        )}
         {error && <p className="error">{error}</p>}
         {plan?.summary.errors?.length ? (
           <div className="banner warn">Some sources failed: {plan.summary.errors.join("; ")}</div>
@@ -138,7 +169,7 @@ export default function WeekPage() {
               (&ldquo;I&apos;ll&rdquo;, &ldquo;will do&rdquo;) and messages waiting for a reply, then fits them around
               tomorrow&apos;s meetings together with a workout and meals.
             </p>
-            <button className="primary" onClick={start}>
+            <button className="primary" onClick={() => start()}>
               Plan tomorrow
             </button>
           </section>

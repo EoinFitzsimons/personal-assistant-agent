@@ -55,6 +55,7 @@ label.check input { margin-top: var(--space-2xs); }
 .sheet, .card { padding: var(--space-lg); border-radius: var(--radius-card); background-color: var(--color-cotton); color: var(--color-print); box-shadow: var(--edge-stock), var(--cast-stock); }
 .sheet + .sheet, .card + .card { margin-top: var(--space-md); }
 .sheet h2, .card h2, .sheet h3 { margin-bottom: var(--space-xs); }
+.confirm { display: grid; gap: var(--space-sm); margin-bottom: var(--space-lg); }
 .empty { display: grid; gap: var(--space-sm); justify-items: start; margin-top: var(--space-lg); }
 .banner { margin-bottom: var(--space-md); padding: var(--space-sm) var(--space-md); border: var(--rule-hair) solid var(--color-rule-2); border-radius: var(--radius-card); background: var(--color-paper-2); }
 .banner.warn { background: var(--color-paper-3); }

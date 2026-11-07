@@ -60,3 +60,17 @@ def test_llm_reasons_keep_goal_link(monkeypatch):
     ranked = rank_mod.rank(cands, {"weekly_goals": ["Ship onboarding flow"]})
     linked = [r for r in ranked if 'goal "Ship onboarding flow"' in r.reason]
     assert linked and all(r.reason.startswith("Important.") for r in linked)
+
+
+def test_replan_requires_confirmation_when_day_has_progress():
+    h = _auth("replan@example.com")
+    pid = client.post("/plans", headers=h).json()["id"]
+    assert client.post("/plans", headers=h).status_code == 201
+    pid = client.get("/plans/latest", headers=h).json()["id"]
+    plan = client.get(f"/plans/{pid}", headers=h).json()
+    workout = next(i for i in plan["items"] if i["kind"] == "workout")
+    client.patch(f"/plans/{pid}/items/{workout['id']}", json={"outcome": "done"}, headers=h)
+    r = client.post("/plans", headers=h)
+    assert r.status_code == 409 and "1 marked done or skipped" in r.json()["detail"]
+    assert client.get("/plans/latest", headers=h).json()["id"] == pid
+    assert client.post("/plans?replace=true", headers=h).status_code == 201
