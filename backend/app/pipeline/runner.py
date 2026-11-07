@@ -87,7 +87,7 @@ def build_plan(db: Session, plan: Plan) -> None:
     user = plan.user
     settings = user.settings
     tz = user_tz(user)
-    plan.status = "gathering"
+    plan.status, plan.error = "gathering", ""
     db.commit()
     data, sources = gather(db, user, plan.date)
 
