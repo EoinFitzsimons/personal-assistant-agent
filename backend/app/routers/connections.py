@@ -1,8 +1,9 @@
-import secrets
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -13,7 +14,6 @@ from app.models import Connection, User
 from app.security import create_token, current_user, decode_token, encrypt
 
 router = APIRouter(tags=["connections"])
-NONCE_COOKIE = "oauth_nonce"
 
 
 def _redirect_uri(provider: str) -> str:
@@ -39,38 +39,41 @@ def authorize(provider: str, user: User = Depends(current_user)):
         raise HTTPException(404, "Unknown provider")
     if not connector.is_configured():
         raise HTTPException(400, f"{connector.display_name} isn't configured on the server yet (missing OAuth app credentials).")
-    # The nonce cookie binds the state to this browser, so a victim can't complete an attacker's OAuth flow.
-    nonce = secrets.token_urlsafe(24)
-    state = create_token(user.id, purpose="oauth", ttl=timedelta(minutes=10),
-                         extra={"provider": provider, "nonce": nonce})
-    resp = JSONResponse({"url": connector.authorize_url(state, _redirect_uri(provider))})
-    resp.set_cookie(NONCE_COOKIE, nonce, max_age=600, httponly=True, samesite="lax", path="/connections",
-                    secure=get_settings().backend_url.startswith("https"))
-    return resp
+    state = create_token(user.id, purpose="oauth", ttl=timedelta(minutes=10), extra={"provider": provider})
+    return {"url": connector.authorize_url(state, _redirect_uri(provider))}
 
 
 @router.get("/connections/{provider}/callback")
-def callback(request: Request, provider: str, code: str = "", state: str = "", error: str = "",
-             db: Session = Depends(get_db)):
+def callback(provider: str, code: str = "", state: str = "", error: str = ""):
+    """Hands the code to the web app, which completes the flow with the signed-in user's token.
+
+    Completing here would let an attacker's authorize URL attach a victim's account to the attacker's user.
+    """
     front = get_settings().frontend_url
+    if get_connector(provider) is None:
+        raise HTTPException(404, "Unknown provider")
+    if error or not code:
+        return RedirectResponse(f"{front}/settings?{urlencode({'error': error or 'cancelled', 'provider': provider})}")
+    return RedirectResponse(f"{front}/settings?{urlencode({'provider': provider, 'code': code, 'state': state})}")
+
+
+class CompleteIn(BaseModel):
+    code: str
+    state: str
+
+
+@router.post("/connections/{provider}/complete")
+def complete(provider: str, body: CompleteIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
     connector = get_connector(provider)
     if connector is None:
         raise HTTPException(404, "Unknown provider")
-    if error or not code:
-        return RedirectResponse(f"{front}/settings?error={error or 'cancelled'}&provider={provider}")
-    payload = decode_token(state, purpose="oauth")
-    if payload.get("provider") != provider:
-        raise HTTPException(400, "State does not match provider")
-    nonce = request.cookies.get(NONCE_COOKIE, "")
-    if not nonce or not secrets.compare_digest(nonce, str(payload.get("nonce", ""))):
-        raise HTTPException(400, "OAuth state was not started from this browser")
-    user = db.get(User, int(payload["sub"]))
-    if user is None:
-        raise HTTPException(404, "User not found")
+    payload = decode_token(body.state, purpose="oauth")
+    if payload.get("provider") != provider or payload.get("sub") != str(user.id):
+        raise HTTPException(400, "This connection was started by a different account")
     try:
-        tokens = connector.exchange_code(code, _redirect_uri(provider))
+        tokens = connector.exchange_code(body.code, _redirect_uri(provider))
     except ConnectorError as exc:
-        return RedirectResponse(f"{front}/settings?error={str(exc)[:300]}&provider={provider}")
+        raise HTTPException(400, str(exc)[:300]) from exc
     conn = next((c for c in user.connections if c.provider == provider), None) or Connection(user_id=user.id,
                                                                                             provider=provider)
     conn.access_token_enc = encrypt(tokens.access_token)
@@ -83,9 +86,7 @@ def callback(request: Request, provider: str, code: str = "", state: str = "", e
     settings["demo_mode"] = False
     user.settings = settings
     db.commit()
-    resp = RedirectResponse(f"{front}/settings?connected={provider}")
-    resp.delete_cookie(NONCE_COOKIE, path="/connections")
-    return resp
+    return {"connected": provider}
 
 
 @router.delete("/connections/{provider}", status_code=204)

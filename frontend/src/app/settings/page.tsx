@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Nav from "@/components/Nav";
 import { api, Connection, Settings } from "@/lib/api";
 
@@ -25,14 +25,28 @@ function SettingsInner() {
     setConns(connections);
   }, []);
 
+  const completing = useRef(false);
+
   useEffect(() => {
-    Promise.all([api<Settings>("/settings"), api<Connection[]>("/connections")])
+    const provider = params.get("provider");
+    const code = params.get("code");
+    const state = params.get("state");
+    let finish: Promise<unknown> = Promise.resolve();
+    if (provider && code && state && !completing.current) {
+      completing.current = true;
+      window.history.replaceState(null, "", "/settings");
+      finish = api(`/connections/${provider}/complete`, { method: "POST", body: JSON.stringify({ code, state }) })
+        .then(() => setMsg(`Connected ${provider}.`))
+        .catch((e) => setErr(`Connection failed: ${e.message}`));
+    }
+    finish
+      .then(() => Promise.all([api<Settings>("/settings"), api<Connection[]>("/connections")]))
       .then(([settings, connections]) => {
         setS(settings);
         setConns(connections);
       })
       .catch((e) => setErr(e.message));
-  }, []);
+  }, [params]);
 
   if (!s) return <main className="page">Loading…</main>;
   const set = <K extends keyof Settings>(k: K, v: Settings[K]) => setS({ ...s, [k]: v });
@@ -51,7 +65,7 @@ function SettingsInner() {
   async function connect(provider: string) {
     setErr("");
     try {
-      const { url } = await api<{ url: string }>(`/connections/${provider}/authorize`, { credentials: "include" });
+      const { url } = await api<{ url: string }>(`/connections/${provider}/authorize`);
       window.location.assign(url);
     } catch (e) {
       setErr((e as Error).message);

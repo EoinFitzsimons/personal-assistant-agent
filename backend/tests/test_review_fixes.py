@@ -51,10 +51,12 @@ def test_rejected_patch_does_not_persist_resize():
     assert next(i for i in after["items"] if i["id"] == workout["id"])["duration_min"] == workout["duration_min"]
 
 
-def test_oauth_callback_requires_browser_nonce():
-    _auth("oauth@example.com")
-    state = create_token(1, purpose="oauth", ttl=timedelta(minutes=5), extra={"provider": "slack", "nonce": "n1"})
-    r = client.get("/connections/slack/callback", params={"code": "x", "state": state}, follow_redirects=False)
+def test_oauth_completion_bound_to_signed_in_user():
+    h = _auth("oauth@example.com")
+    r = client.get("/connections/slack/callback", params={"code": "c1", "state": "s1"}, follow_redirects=False)
+    assert r.status_code in (302, 307) and "code=c1" in r.headers["location"] and "/settings?" in r.headers["location"]
+    attacker_state = create_token(999, purpose="oauth", ttl=timedelta(minutes=5), extra={"provider": "slack"})
+    r = client.post("/connections/slack/complete", json={"code": "c1", "state": attacker_state}, headers=h)
     assert r.status_code == 400
 
 
