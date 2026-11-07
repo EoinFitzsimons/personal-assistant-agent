@@ -1,7 +1,8 @@
+import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -12,6 +13,7 @@ from app.models import Connection, User
 from app.security import create_token, current_user, decode_token, encrypt
 
 router = APIRouter(tags=["connections"])
+NONCE_COOKIE = "oauth_nonce"
 
 
 def _redirect_uri(provider: str) -> str:
@@ -37,12 +39,19 @@ def authorize(provider: str, user: User = Depends(current_user)):
         raise HTTPException(404, "Unknown provider")
     if not connector.is_configured():
         raise HTTPException(400, f"{connector.display_name} isn't configured on the server yet (missing OAuth app credentials).")
-    state = create_token(user.id, purpose="oauth", ttl=timedelta(minutes=10), extra={"provider": provider})
-    return {"url": connector.authorize_url(state, _redirect_uri(provider))}
+    # The nonce cookie binds the state to this browser, so a victim can't complete an attacker's OAuth flow.
+    nonce = secrets.token_urlsafe(24)
+    state = create_token(user.id, purpose="oauth", ttl=timedelta(minutes=10),
+                         extra={"provider": provider, "nonce": nonce})
+    resp = JSONResponse({"url": connector.authorize_url(state, _redirect_uri(provider))})
+    resp.set_cookie(NONCE_COOKIE, nonce, max_age=600, httponly=True, samesite="lax", path="/connections",
+                    secure=get_settings().backend_url.startswith("https"))
+    return resp
 
 
 @router.get("/connections/{provider}/callback")
-def callback(provider: str, code: str = "", state: str = "", error: str = "", db: Session = Depends(get_db)):
+def callback(request: Request, provider: str, code: str = "", state: str = "", error: str = "",
+             db: Session = Depends(get_db)):
     front = get_settings().frontend_url
     connector = get_connector(provider)
     if connector is None:
@@ -52,6 +61,9 @@ def callback(provider: str, code: str = "", state: str = "", error: str = "", db
     payload = decode_token(state, purpose="oauth")
     if payload.get("provider") != provider:
         raise HTTPException(400, "State does not match provider")
+    nonce = request.cookies.get(NONCE_COOKIE, "")
+    if not nonce or not secrets.compare_digest(nonce, str(payload.get("nonce", ""))):
+        raise HTTPException(400, "OAuth state was not started from this browser")
     user = db.get(User, int(payload["sub"]))
     if user is None:
         raise HTTPException(404, "User not found")
@@ -71,7 +83,9 @@ def callback(provider: str, code: str = "", state: str = "", error: str = "", db
     settings["demo_mode"] = False
     user.settings = settings
     db.commit()
-    return RedirectResponse(f"{front}/settings?connected={provider}")
+    resp = RedirectResponse(f"{front}/settings?connected={provider}")
+    resp.delete_cookie(NONCE_COOKIE, path="/connections")
+    return resp
 
 
 @router.delete("/connections/{provider}", status_code=204)

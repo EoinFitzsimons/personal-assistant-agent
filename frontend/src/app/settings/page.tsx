@@ -51,7 +51,7 @@ function SettingsInner() {
   async function connect(provider: string) {
     setErr("");
     try {
-      const { url } = await api<{ url: string }>(`/connections/${provider}/authorize`);
+      const { url } = await api<{ url: string }>(`/connections/${provider}/authorize`, { credentials: "include" });
       window.location.assign(url);
     } catch (e) {
       setErr((e as Error).message);
