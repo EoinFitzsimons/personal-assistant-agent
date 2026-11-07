@@ -1,13 +1,17 @@
 from functools import lru_cache
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEV_JWT_SECRET = "dev-secret-change-me"
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    app_env: str = "development"
     database_url: str = "sqlite:///./assistant.db"
-    jwt_secret: str = "dev-secret-change-me"
+    jwt_secret: str = DEV_JWT_SECRET
     jwt_ttl_hours: int = 24 * 7
     # Fernet key (urlsafe base64, 32 bytes). Derived from jwt_secret when empty (dev only).
     token_encryption_key: str = ""
@@ -35,6 +39,12 @@ class Settings(BaseSettings):
     oura_client_secret: str = ""
 
     lookback_hours: int = 48
+
+    @model_validator(mode="after")
+    def _require_real_secret(self) -> "Settings":
+        if self.app_env != "development" and self.jwt_secret in ("", DEV_JWT_SECRET, "change-me"):
+            raise ValueError("Set JWT_SECRET to a random value (e.g. `openssl rand -hex 32`) outside development")
+        return self
 
 
 @lru_cache

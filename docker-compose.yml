@@ -16,7 +16,9 @@ services:
     build: ./backend
     env_file: [{path: .env, required: false}]
     environment:
+      APP_ENV: production
       DATABASE_URL: postgresql+psycopg://assistant:assistant@db:5432/assistant
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (openssl rand -hex 32)}
     ports: ["8000:8000"]
     depends_on:
       db: {condition: service_healthy}
@@ -26,7 +28,9 @@ services:
     command: ["python", "-m", "app.worker"]
     env_file: [{path: .env, required: false}]
     environment:
+      APP_ENV: production
       DATABASE_URL: postgresql+psycopg://assistant:assistant@db:5432/assistant
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (openssl rand -hex 32)}
     depends_on:
       db: {condition: service_healthy}
 

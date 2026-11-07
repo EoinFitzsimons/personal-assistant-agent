@@ -13,7 +13,8 @@ Design: [docs/design.md](docs/design.md).
 ## Quick start (Docker)
 
 ```bash
-cp .env.example .env   # optional: LLM key, OAuth apps
+cp .env.example .env
+sed -i "s/^JWT_SECRET=.*/JWT_SECRET=$(openssl rand -hex 32)/" .env   # required; add LLM key / OAuth apps as needed
 docker compose up --build
 ```
 
