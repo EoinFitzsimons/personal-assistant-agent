@@ -74,3 +74,13 @@ def test_replan_requires_confirmation_when_day_has_progress():
     assert r.status_code == 409 and "1 marked done or skipped" in r.json()["detail"]
     assert client.get("/plans/latest", headers=h).json()["id"] == pid
     assert client.post("/plans?replace=true", headers=h).status_code == 201
+
+
+def test_removed_item_counts_as_progress():
+    h = _auth("removed@example.com")
+    pid = client.post("/plans", headers=h).json()["id"]
+    plan = client.get(f"/plans/{pid}", headers=h).json()
+    meal = next(i for i in plan["items"] if i["kind"] == "meal")
+    client.patch(f"/plans/{pid}/items/{meal['id']}", json={"status": "removed"}, headers=h)
+    r = client.post("/plans", headers=h)
+    assert r.status_code == 409 and "1 removed" in r.json()["detail"]

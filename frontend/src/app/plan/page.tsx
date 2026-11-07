@@ -19,9 +19,11 @@ const STATUS_TEXT: Record<string, string> = {
 function progressOf(plan: Plan) {
   const marked = plan.items.filter((i) => i.outcome).length;
   const kept = plan.items.filter((i) => i.kind !== "meeting" && (i.status === "approved" || i.fixed)).length;
+  const removed = plan.items.filter((i) => i.status === "removed").length;
   const parts: string[] = [];
   if (marked) parts.push(`${marked} marked done or skipped`);
   if (kept) parts.push(`${kept} kept or moved`);
+  if (removed) parts.push(`${removed} removed`);
   if (plan.review_note) parts.push("your review note");
   if (plan.messages.length) parts.push("chat edits");
   return parts;

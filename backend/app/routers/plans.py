@@ -26,11 +26,14 @@ def progress_of(plan: Plan) -> list[str]:
     """What the user has done to a plan that a re-plan would discard."""
     marked = sum(bool(i.outcome) for i in plan.items)
     kept = sum(i.kind != "meeting" and (i.status == "approved" or i.fixed) for i in plan.items)
+    removed = sum(i.status == "removed" for i in plan.items)
     parts = []
     if marked:
         parts.append(f"{marked} marked done or skipped")
     if kept:
         parts.append(f"{kept} kept or moved")
+    if removed:
+        parts.append(f"{removed} removed")
     if plan.review_note:
         parts.append("your review note")
     if plan.messages:
