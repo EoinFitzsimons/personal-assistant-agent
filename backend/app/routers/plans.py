@@ -86,6 +86,10 @@ def patch_item(plan_id: int, item_id: int, body: ItemPatch, user: User = Depends
         raise HTTPException(404, "Item not found")
     if body.outcome is not None:
         item.outcome = body.outcome
+    if body.duration_min is None and body.start is None and body.status is None:
+        db.commit()
+        db.refresh(plan)
+        return plan
     try:
         if body.duration_min is not None:
             ops_errors = apply_ops(db, plan, [{"op": "resize", "item_id": item.id, "duration_min": body.duration_min}])
