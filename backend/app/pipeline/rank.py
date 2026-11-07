@@ -78,8 +78,11 @@ def _llm_rank(cands: list[Candidate], settings: dict) -> list[RankedTask] | None
         except (KeyError, ValueError, IndexError, TypeError):
             continue
         seen.add(idx)
-        ranked.append(RankedTask(c, float(r.get("priority", 50)), int(r.get("duration_min", 30)),
-                                 str(r.get("reason", ""))))
+        reason = str(r.get("reason", "")).strip()
+        goal = _goal_hit(f"{c.title} {c.details}", settings.get("weekly_goals", []))
+        if goal and f'goal "{goal}"' not in reason:
+            reason = f'{reason.rstrip(".")}. Supports your goal "{goal}".' if reason else f'Supports your goal "{goal}".'
+        ranked.append(RankedTask(c, float(r.get("priority", 50)), int(r.get("duration_min", 30)), reason))
     ranked += [_rule_rank(c, settings) for i, c in enumerate(cands) if i not in seen]
     return ranked
 
