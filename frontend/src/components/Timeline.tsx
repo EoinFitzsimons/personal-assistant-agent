@@ -108,6 +108,11 @@ export default function Timeline({ items, onMove, onStatus }: Props) {
                   {hhmm(item.start)}–{hhmm(item.end)}
                 </span>
                 <span className="kind">{KIND_LABEL[item.kind]}</span>
+                {h < 45 && item.source_link && (
+                  <a href={item.source_link} target="_blank" rel="noreferrer" title={item.reason}>
+                    source
+                  </a>
+                )}
                 {item.fixed && item.kind !== "meeting" && <span className="pin" title="Pinned by you">📌</span>}
                 {item.status === "approved" && item.kind !== "meeting" && <span className="tick">✓ approved</span>}
                 {movable && (
