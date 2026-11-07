@@ -36,7 +36,8 @@ def _add_missing_columns() -> None:
                 if col.name in existing:
                     continue
                 default = col.default.arg if col.default is not None and not callable(col.default.arg) else None
-                ddl = f'ALTER TABLE {table.name} ADD COLUMN {col.name} {col.type.compile(engine.dialect)}'
+                guard = "IF NOT EXISTS " if engine.dialect.name == "postgresql" else ""
+                ddl = f'ALTER TABLE {table.name} ADD COLUMN {guard}{col.name} {col.type.compile(engine.dialect)}'
                 if isinstance(default, str):
                     ddl += f" DEFAULT '{default}' NOT NULL"
                 conn.execute(text(ddl))
