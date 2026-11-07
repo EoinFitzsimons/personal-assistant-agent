@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -43,12 +43,10 @@ def latest_plan(user: User = Depends(current_user), db: Session = Depends(get_db
 
 @router.get("", response_model=list[PlanSummaryOut])
 def list_plans(user: User = Depends(current_user), db: Session = Depends(get_db)):
-    plans = db.scalars(select(Plan).where(Plan.user_id == user.id).order_by(Plan.date.desc(), Plan.id.desc()).limit(30))
-    out, seen = [], set()
+    latest_per_day = select(func.max(Plan.id)).where(Plan.user_id == user.id).group_by(Plan.date)
+    plans = db.scalars(select(Plan).where(Plan.id.in_(latest_per_day)).order_by(Plan.date.desc()).limit(30))
+    out = []
     for p in plans:
-        if p.date in seen:
-            continue
-        seen.add(p.date)
         timed = [i for i in p.items if i.start and i.kind != "meeting" and i.status not in ("removed", "inbox", "unscheduled")]
         out.append(PlanSummaryOut(id=p.id, date=p.date, status=p.status, planned=len(timed),
                                   done=sum(i.outcome == "done" for i in timed),
