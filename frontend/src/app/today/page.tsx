@@ -9,20 +9,15 @@ import Outcome from "@/components/Outcome";
 import Skeleton from "@/components/Skeleton";
 import { usePlanLoader } from "@/components/usePlanLoader";
 import { api, focusPlan, patchItem, Plan, PlanItem } from "@/lib/api";
-import { dayLabel, hhmm, isToday, KIND_LABEL, longDate, minutesOf, timed } from "@/lib/labels";
-
-function nowMinutes() {
-  const d = new Date();
-  return d.getHours() * 60 + d.getMinutes();
-}
+import { clockAt, dayLabel, hhmm, KIND_LABEL, longDate, minutesOf, offsetMinutes, timed } from "@/lib/labels";
 
 export default function TodayPage() {
   const router = useRouter();
   const { plan, setPlan, loaded, error, setError } = usePlanLoader(focusPlan);
-  const [now, setNow] = useState(nowMinutes);
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    const t = setInterval(() => setNow(nowMinutes()), 60_000);
+    const t = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(t);
   }, []);
 
@@ -44,9 +39,12 @@ export default function TodayPage() {
   }
 
   const ready = plan?.status === "ready";
-  const today = plan ? isToday(plan.date) : false;
-  const live = today ? now : -1;
   const blocks = plan ? timed(plan.items) : [];
+  // Plan times carry the user's configured timezone offset; the device clock may be elsewhere.
+  const offset = blocks[0]?.start ? offsetMinutes(blocks[0].start) : -new Date(now).getTimezoneOffset();
+  const clock = clockAt(offset, now);
+  const today = plan ? plan.date === clock.date : false;
+  const live = today ? clock.minutes : -1;
   const upcoming = blocks.filter((i) => minutesOf(i.end!) > live && (i.kind === "meeting" || !i.outcome));
   const earlier = blocks.filter((i) => !upcoming.includes(i));
   const focus = upcoming[0];

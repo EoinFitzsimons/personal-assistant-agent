@@ -30,6 +30,16 @@ function isoDate(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+export function offsetMinutes(iso: string) {
+  const m = iso.match(/([+-])(\d{2}):(\d{2})$/);
+  return m ? (m[1] === "-" ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3])) : 0;
+}
+
+export function clockAt(offsetMin: number, timestamp: number) {
+  const d = new Date(timestamp + offsetMin * 60_000);
+  return { date: d.toISOString().slice(0, 10), minutes: d.getUTCHours() * 60 + d.getUTCMinutes() };
+}
+
 export function isToday(date: string) {
   return date === isoDate(new Date());
 }
