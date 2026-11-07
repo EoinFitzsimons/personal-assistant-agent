@@ -150,10 +150,14 @@ def _llm_confirm(pre: list[Item], threads: dict[str, list[Item]], user_name: str
             continue
         if not r.get("is_commitment") or r.get("already_done"):
             continue
+        try:
+            confidence = min(max(float(r.get("confidence", 0.7)), 0.0), 1.0)
+        except (TypeError, ValueError):
+            confidence = 0.7
         out.append(Candidate(
             kind="commitment", title=r.get("task") or _clean_task(item.text), details=item.text,
             source_provider=item.provider, source_link=item.link, owed_to=r.get("owed_to", ""),
-            due_soon=bool(r.get("due_soon")), confidence=float(r.get("confidence", 0.7)), channel=item.channel,
+            due_soon=bool(r.get("due_soon")), confidence=confidence, channel=item.channel,
             ts=item.ts, item_ids=[item.id],
         ))
     return out
