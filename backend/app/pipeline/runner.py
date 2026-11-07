@@ -99,7 +99,7 @@ def build_plan(db: Session, plan: Plan) -> None:
     fixed = [Block(kind="meeting", title=e.title, duration_min=int((e.end - e.start).total_seconds() // 60),
                    start=e.start.astimezone(tz), end=e.end.astimezone(tz), fixed=True, source_provider=e.provider,
                    source_link=e.link, details=", ".join(e.attendees[:6]), status="approved")
-             for e in data.events if not e.all_day]
+             for e in data.events if not e.all_day or e.show_as in ("busy", "oof")]
     flexible: list[Block] = meal_blocks(plan.date, settings)
     flexible.append(workout_block(plan.date, settings, data.health))
     inbox: list[Block] = []
@@ -135,7 +135,7 @@ def build_plan(db: Session, plan: Plan) -> None:
     db.commit()
 
 
-def run_plan_job(plan_id: int) -> None:
+def run_plan_job(plan_id: int, raise_errors: bool = False) -> None:
     db = SessionLocal()
     try:
         plan = db.get(Plan, plan_id)
@@ -148,6 +148,8 @@ def run_plan_job(plan_id: int) -> None:
             db.rollback()
             plan.status, plan.error = "failed", str(exc)[:2000]
             db.commit()
+            if raise_errors:
+                raise
     finally:
         db.close()
 
@@ -178,7 +180,7 @@ def replan(db: Session, plan: Plan) -> None:
     for b in schedule(plan.date, plan.user.settings, fixed, flexible):
         item = by_id[b.ref]
         item.start, item.end, item.status = b.start, b.end, b.status
-    db.commit()
+    db.flush()
 
 
 class EditError(ValueError):
