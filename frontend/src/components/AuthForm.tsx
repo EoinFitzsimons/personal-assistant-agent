@@ -24,7 +24,7 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
         body: JSON.stringify(body),
       });
       setToken(token);
-      router.push(mode === "signup" ? "/settings?welcome=1" : "/plan");
+      router.push(mode === "signup" ? "/settings?welcome=1" : "/today");
     } catch (err) {
       setError((err as Error).message);
     } finally {

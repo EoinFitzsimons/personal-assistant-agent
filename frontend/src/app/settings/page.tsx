@@ -81,8 +81,7 @@ function SettingsInner() {
     <main className="page settings">
       {params.get("welcome") && (
         <div className="banner">
-          Welcome! Tell the assistant what matters to you, connect your apps (or keep demo data on), then go to{" "}
-          <b>Plan</b>.
+          Welcome! Tell the assistant what matters to you, connect your apps (or keep demo data on), then open <b>Week</b> to plan tomorrow.
         </div>
       )}
       <section className="card">
@@ -93,7 +92,7 @@ function SettingsInner() {
             <li key={c.provider}>
               <div>
                 <b>{c.name}</b> <span className="pill">{c.category}</span>
-                {c.connected && <span className="muted small"> · {c.account}</span>}
+                {c.connected && <span className="muted small"> {c.account}</span>}
                 {!c.configured && <div className="muted small">Not configured on this server yet</div>}
               </div>
               {c.connected ? (

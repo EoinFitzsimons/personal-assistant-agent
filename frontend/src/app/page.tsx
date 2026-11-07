@@ -7,7 +7,7 @@ import { getToken } from "@/lib/api";
 export default function Home() {
   const router = useRouter();
   useEffect(() => {
-    router.replace(getToken() ? "/plan" : "/login");
+    router.replace(getToken() ? "/today" : "/login");
   }, [router]);
   return null;
 }

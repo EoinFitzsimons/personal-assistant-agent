@@ -17,6 +17,7 @@ export type PlanItem = {
   status: "proposed" | "approved" | "removed" | "inbox" | "unscheduled";
   fixed: boolean;
   tag: string;
+  outcome: "" | "done" | "skipped";
 };
 
 export type ChatMessage = { id: number; role: "user" | "assistant"; content: string; created_at: string };
@@ -32,6 +33,7 @@ export type Plan = {
     health?: Record<string, number>;
     errors?: string[];
   };
+  review_note: string;
   items: PlanItem[];
   messages: ChatMessage[];
 };
@@ -101,3 +103,22 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
   return (res.status === 204 ? undefined : await res.json()) as T;
 }
+
+export type PlanSummary = {
+  id: number;
+  date: string;
+  status: Plan["status"];
+  planned: number;
+  done: number;
+  skipped: number;
+};
+
+export const latestPlan = () => api<Plan | null>("/plans/latest");
+
+export async function focusPlan(): Promise<Plan | null> {
+  const today = await api<Plan | null>("/plans/today");
+  return today ?? latestPlan();
+}
+
+export const patchItem = (planId: number, itemId: number, body: object) =>
+  api<Plan>(`/plans/${planId}/items/${itemId}`, { method: "PATCH", body: JSON.stringify(body) });
