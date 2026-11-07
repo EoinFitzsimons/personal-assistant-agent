@@ -6,7 +6,7 @@ from app.config import get_settings
 from app.db import get_db
 from app.models import ChatMessage, Job, Plan, PlanItem, User
 from app.pipeline import chat_edit
-from app.pipeline.runner import EditError, apply_ops, move_item, replan, run_plan_job, tomorrow_for
+from app.pipeline.runner import EditError, apply_ops, move_item, replan, run_plan_job, tomorrow_for, user_tz
 from app.schemas import ChatIn, ChatOut, ItemPatch, PlanOut
 from app.security import current_user
 
@@ -67,6 +67,7 @@ def patch_item(plan_id: int, item_id: int, body: ItemPatch, user: User = Depends
         raise HTTPException(409, str(exc)) from exc
     db.flush()
     replan(db, plan)
+    db.commit()
     db.refresh(plan)
     return plan
 
@@ -87,9 +88,10 @@ def chat(plan_id: int, body: ChatIn, user: User = Depends(current_user), db: Ses
     plan = _plan(db, user, plan_id)
     if plan.status != "ready":
         raise HTTPException(409, "The plan is still being prepared")
+    tz = user_tz(user)
     items = [
         {"id": i.id, "kind": i.kind, "tag": i.tag, "title": i.title, "status": i.status,
-         "start": i.start.strftime("%H:%M") if i.start else None, "duration_min": i.duration_min}
+         "start": i.start.astimezone(tz).strftime("%H:%M") if i.start else None, "duration_min": i.duration_min}
         for i in plan.items if i.status not in ("removed",)
     ]
     ops, reply = chat_edit.parse(body.message, items)

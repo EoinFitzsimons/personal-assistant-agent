@@ -1,6 +1,7 @@
-from datetime import date, datetime
+from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 
 class SignupIn(BaseModel):
@@ -63,6 +64,23 @@ class PlanOut(BaseModel):
     summary: dict
     items: list[PlanItemOut]
     messages: list[ChatMessageOut]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _items_in_user_tz(cls, obj):
+        """Times are stored in UTC; the timeline shows wall-clock times in the user's timezone."""
+        user = getattr(obj, "user", None)
+        if user is None:
+            return obj
+        tz = ZoneInfo(user.settings.get("timezone") or "UTC")
+
+        def local(dt: datetime | None) -> datetime | None:
+            return None if dt is None else (dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)).astimezone(tz)
+
+        data = {f: getattr(obj, f) for f in ("id", "date", "status", "error", "summary", "messages")}
+        data["items"] = [PlanItemOut.model_validate(i).model_copy(update={"start": local(i.start), "end": local(i.end)})
+                         for i in obj.items]
+        return data
 
 
 class ItemPatch(BaseModel):
