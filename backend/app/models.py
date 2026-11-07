@@ -98,6 +98,7 @@ class Plan(Base):
     status: Mapped[str] = mapped_column(String(20), default="gathering")
     error: Mapped[str] = mapped_column(Text, default="")
     summary: Mapped[dict] = mapped_column(JSON, default=dict)
+    review_note: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
     user: Mapped[User] = relationship(back_populates="plans")
@@ -129,6 +130,7 @@ class PlanItem(Base):
     status: Mapped[str] = mapped_column(String(20), default="proposed")
     fixed: Mapped[bool] = mapped_column(default=False)
     tag: Mapped[str] = mapped_column(String(30), default="")
+    outcome: Mapped[str] = mapped_column(String(20), default="")
 
     plan: Mapped[Plan] = relationship(back_populates="items")
 
