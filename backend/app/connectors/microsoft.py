@@ -1,7 +1,7 @@
 """Outlook mail + calendar and Teams chat via Microsoft Graph (read-only)."""
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 import httpx
 from dateutil import parser as dtparser
@@ -15,7 +15,7 @@ MAX_CHATS = 30
 
 
 def _iso(dt: datetime) -> str:
-    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _strip_html(html: str) -> str:
