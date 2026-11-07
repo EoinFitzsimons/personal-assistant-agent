@@ -45,6 +45,7 @@ class PlanItemOut(BaseModel):
     status: str
     fixed: bool
     tag: str
+    outcome: str = ""
 
 
 class ChatMessageOut(BaseModel):
@@ -62,6 +63,7 @@ class PlanOut(BaseModel):
     status: str
     error: str
     summary: dict
+    review_note: str = ""
     items: list[PlanItemOut]
     messages: list[ChatMessageOut]
 
@@ -77,7 +79,7 @@ class PlanOut(BaseModel):
         def local(dt: datetime | None) -> datetime | None:
             return None if dt is None else (dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)).astimezone(tz)
 
-        data = {f: getattr(obj, f) for f in ("id", "date", "status", "error", "summary", "messages")}
+        data = {f: getattr(obj, f) for f in ("id", "date", "status", "error", "summary", "review_note", "messages")}
         data["items"] = [PlanItemOut.model_validate(i).model_copy(update={"start": local(i.start), "end": local(i.end)})
                          for i in obj.items]
         return data
@@ -87,6 +89,20 @@ class ItemPatch(BaseModel):
     status: str | None = Field(default=None, pattern="^(proposed|approved|removed)$")
     start: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
     duration_min: int | None = Field(default=None, ge=5, le=480)
+    outcome: str | None = Field(default=None, pattern="^(|done|skipped)$")
+
+
+class ReviewIn(BaseModel):
+    note: str = Field(default="", max_length=2000)
+
+
+class PlanSummaryOut(BaseModel):
+    id: int
+    date: date
+    status: str
+    planned: int
+    done: int
+    skipped: int
 
 
 class ChatIn(BaseModel):

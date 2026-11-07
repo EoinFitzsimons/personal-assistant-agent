@@ -2,30 +2,12 @@
 
 import { DragEvent, useState } from "react";
 import { PlanItem } from "@/lib/api";
+import { hhmm, KIND_LABEL, minutesOf } from "@/lib/labels";
 
 const START_HOUR = 6;
 const END_HOUR = 23;
 const PX_PER_MIN = 1.3;
 const SNAP = 15;
-
-const KIND_LABEL: Record<PlanItem["kind"], string> = {
-  meeting: "Meeting",
-  task: "Task",
-  commitment: "You said you'd do this",
-  follow_up: "Follow-up",
-  workout: "Workout",
-  meal: "Meal",
-};
-
-export function hhmm(iso: string | null) {
-  if (!iso) return "";
-  return iso.slice(11, 16);
-}
-
-function minutesOf(iso: string) {
-  const [h, m] = iso.slice(11, 16).split(":").map(Number);
-  return h * 60 + m;
-}
 
 type Props = {
   items: PlanItem[];
@@ -105,7 +87,7 @@ export default function Timeline({ items, onMove, onStatus }: Props) {
             >
               <div className="block-head">
                 <span className="time">
-                  {hhmm(item.start)}–{hhmm(item.end)}
+                  {hhmm(item.start)} <span className="dur">{item.duration_min} min</span>
                 </span>
                 <span className="kind">{KIND_LABEL[item.kind]}</span>
                 {h < 45 && item.source_link && (
@@ -113,23 +95,24 @@ export default function Timeline({ items, onMove, onStatus }: Props) {
                     source
                   </a>
                 )}
-                {item.fixed && item.kind !== "meeting" && <span className="pin" title="Pinned by you">📌</span>}
-                {item.status === "approved" && item.kind !== "meeting" && <span className="tick">✓ approved</span>}
+                {item.fixed && item.kind !== "meeting" && <span className="pin">Pinned</span>}
+                {item.status === "approved" && item.kind !== "meeting" && <span className="tick">Kept</span>}
+                {item.outcome === "done" && <span className="stamp">Done</span>}
                 {movable && (
                   <span className="btns">
                     {item.status !== "approved" && (
-                      <button title="Approve" onClick={() => onStatus(item, "approved")}>
-                        ✓
+                      <button title="Keep this in the plan" onClick={() => onStatus(item, "approved")}>
+                        Keep
                       </button>
                     )}
                     <button title="Remove" onClick={() => onStatus(item, "removed")}>
-                      ✕
+                      Remove
                     </button>
                   </span>
                 )}
               </div>
               <div className="block-title">{item.title}</div>
-              {h >= 45 && (
+              {h >= 72 && (
                 <div className="block-reason">
                   {item.reason}
                   {item.source_link && (

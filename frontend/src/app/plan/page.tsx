@@ -1,23 +1,48 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import ChatPanel from "@/components/ChatPanel";
 import Nav from "@/components/Nav";
-import Timeline, { hhmm } from "@/components/Timeline";
-import { api, ChatMessage, getToken, Plan, PlanItem } from "@/lib/api";
+import Skeleton from "@/components/Skeleton";
+import Timeline from "@/components/Timeline";
+import { api, ChatMessage, getToken, Plan, PlanItem, PlanSummary } from "@/lib/api";
+import { dayLabel, hhmm, longDate } from "@/lib/labels";
 
 const STATUS_TEXT: Record<string, string> = {
-  gathering: "Gathering messages, emails, calendar and health data…",
-  planning: "Prioritising and building your plan…",
-  failed: "Planning failed",
+  gathering: "Reading your messages, email, calendar and health data.",
+  planning: "Putting tomorrow in order.",
+  failed: "Planning failed.",
 };
 
-export default function PlanPage() {
+function sourceLine(plan: Plan) {
+  const c = plan.summary.counts ?? {};
+  const h = plan.summary.health ?? {};
+  const from = (plan.summary.sources ?? []).join(", ") || "your apps";
+  const parts = [
+    `Read ${c.messages ?? 0} messages, ${c.emails ?? 0} emails and ${c.meetings ?? 0} meetings from ${from}.`,
+    `Found ${c.commitments ?? 0} ${c.commitments === 1 ? "promise" : "promises"} and ${c.follow_ups ?? 0} ${c.follow_ups === 1 ? "reply" : "replies"} owed.`,
+  ];
+  if (h.sleep_hours !== undefined) {
+    parts.push(`Slept ${h.sleep_hours} h${h.readiness !== undefined ? `, readiness ${h.readiness}` : ""}.`);
+  }
+  return parts.join(" ");
+}
+
+export default function WeekPage() {
   const router = useRouter();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
+  const [history, setHistory] = useState<PlanSummary[]>([]);
+
+  useEffect(() => {
+    if (!getToken()) return;
+    api<PlanSummary[]>("/plans")
+      .then(setHistory)
+      .catch(() => setHistory([]));
+  }, [plan?.id, plan?.status]);
 
   const refresh = useCallback(async (id?: number) => {
     const p = id ? await api<Plan>(`/plans/${id}`) : await api<Plan | null>("/plans/latest");
@@ -78,8 +103,9 @@ export default function PlanPage() {
   const removed = items.filter((i) => i.status === "removed");
   const ready = plan?.status === "ready";
   const proposed = items.filter((i) => i.status === "proposed").length;
-  const health = plan?.summary.health ?? {};
-  const counts = plan?.summary.counts ?? {};
+
+  const past = history.filter((h) => h.id !== plan?.id && h.status === "ready");
+  const busy = plan?.status === "gathering" || plan?.status === "planning";
 
   return (
     <>
@@ -87,22 +113,13 @@ export default function PlanPage() {
       <main className="page plan">
         <div className="plan-head">
           <div>
-            <h1>{plan ? `Plan for ${new Date(plan.date + "T12:00:00").toDateString()}` : "Plan tomorrow"}</h1>
-            {ready && (
-              <p className="muted small">
-                From {(plan!.summary.sources ?? []).join(", ")}: {counts.messages ?? 0} messages, {counts.emails ?? 0}{" "}
-                emails, {counts.meetings ?? 0} meetings · {counts.commitments ?? 0} commitments,{" "}
-                {counts.follow_ups ?? 0} follow-ups detected
-                {health.sleep_hours !== undefined && ` · sleep ${health.sleep_hours}h`}
-                {health.readiness !== undefined && ` · readiness ${health.readiness}`}
-              </p>
-            )}
+            <h1>{plan ? dayLabel(plan.date) : "Plan tomorrow"}</h1>
+            {plan && <p className="muted">{longDate(plan.date)}</p>}
+            {ready && <p className="muted small">{sourceLine(plan!)}</p>}
           </div>
           <div className="head-actions">
-            {ready && proposed > 0 && (
-              <button onClick={approveAll}>Approve all ({proposed})</button>
-            )}
-            <button className="primary" onClick={start} disabled={plan?.status === "gathering" || plan?.status === "planning"}>
+            {ready && proposed > 0 && <button onClick={approveAll}>Keep all suggestions ({proposed})</button>}
+            <button className="primary" onClick={start} disabled={busy}>
               {plan ? "Re-plan tomorrow" : "Plan tomorrow"}
             </button>
           </div>
@@ -112,42 +129,44 @@ export default function PlanPage() {
           <div className="banner warn">Some sources failed: {plan.summary.errors.join("; ")}</div>
         ) : null}
 
-        {!loaded && <p>Loading…</p>}
+        {!loaded && <Skeleton />}
         {loaded && !plan && (
-          <div className="card empty">
+          <section className="sheet empty">
             <h2>Ready when you are</h2>
             <p className="muted">
-              The assistant reads the last 48h of Slack, Teams and email, finds things you promised (&ldquo;I&apos;ll…&rdquo;,
-              &ldquo;will do&rdquo;) and messages waiting for a reply, then fits them around tomorrow&apos;s meetings
-              together with a workout and meals.
+              The assistant reads the last 48 hours of Slack, Teams and email, finds things you promised
+              (&ldquo;I&apos;ll&rdquo;, &ldquo;will do&rdquo;) and messages waiting for a reply, then fits them around
+              tomorrow&apos;s meetings together with a workout and meals.
             </p>
             <button className="primary" onClick={start}>
               Plan tomorrow
             </button>
-          </div>
+          </section>
         )}
         {plan && !ready && (
-          <div className={`card status ${plan.status}`}>
-            {plan.status !== "failed" && <span className="spinner" />}
-            {STATUS_TEXT[plan.status]}
+          <section className={`sheet status ${plan.status}`}>
+            {plan.status !== "failed" && <span className="spinner" aria-hidden="true" />}
+            <span>{STATUS_TEXT[plan.status]}</span>
             {plan.error && <div className="error small">{plan.error}</div>}
-          </div>
+          </section>
         )}
 
         {ready && (
           <div className="plan-body">
-            <div className="card timeline-card">
-              <p className="muted small">Drag items to reschedule. Meetings come from your calendar and stay fixed.</p>
+            <section className="sheet timeline-card">
+              <p className="muted small">Drag to reschedule. Meetings come from your calendar and stay put.</p>
               <Timeline
                 items={items}
                 onMove={(item, s) => patch(item, { start: s })}
                 onStatus={(item, status) => patch(item, { status })}
               />
-            </div>
+            </section>
             <aside>
-              <div className="card">
-                <h3>Detected commitments inbox ({inbox.length})</h3>
-                {inbox.length === 0 && <p className="muted small">Nothing uncertain. Clear commitments are already in the plan.</p>}
+              <section className="sheet">
+                <h3>Needs a decision ({inbox.length})</h3>
+                {inbox.length === 0 && (
+                  <p className="muted small">Nothing uncertain. Clear promises are already in the plan.</p>
+                )}
                 {inbox.map((i) => (
                   <div key={i.id} className="side-item">
                     <div>
@@ -162,34 +181,53 @@ export default function PlanPage() {
                     </div>
                   </div>
                 ))}
-              </div>
+              </section>
               {unscheduled.length > 0 && (
-                <div className="card">
-                  <h3>Didn&apos;t fit tomorrow ({unscheduled.length})</h3>
+                <section className="sheet">
+                  <h3>No room tomorrow ({unscheduled.length})</h3>
                   {unscheduled.map((i) => (
                     <div key={i.id} className="side-item">
                       <b>{i.title}</b>
                       <div className="muted small">{i.reason}</div>
                     </div>
                   ))}
-                </div>
+                </section>
               )}
               <ChatPanel messages={plan!.messages} onSend={send} disabled={!ready} />
               {removed.length > 0 && (
-                <div className="card">
+                <section className="sheet">
                   <h3>Removed ({removed.length})</h3>
                   {removed.map((i) => (
                     <div key={i.id} className="side-item">
                       <span>
-                        {i.title} {i.start && <span className="muted small">({hhmm(i.start)})</span>}
+                        {i.title} {i.start && <span className="muted small fig">{hhmm(i.start)}</span>}
                       </span>
                       <button onClick={() => patch(i, { status: "proposed" })}>Restore</button>
                     </div>
                   ))}
-                </div>
+                </section>
               )}
             </aside>
           </div>
+        )}
+
+        {past.length > 0 && (
+          <section className="past">
+            <h2>Past days</h2>
+            <ol className="list">
+              {past.map((h) => (
+                <li key={h.id} className="row-item">
+                  <span className="when fig">{h.date.slice(5)}</span>
+                  <span className="what">
+                    <Link href={`/review?plan=${h.id}`}>{longDate(h.date)}</Link>
+                  </span>
+                  <span className="muted small">
+                    {h.done} of {h.planned} done
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </section>
         )}
       </main>
     </>

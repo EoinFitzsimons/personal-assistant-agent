@@ -8,10 +8,11 @@ type Props = { messages: ChatMessage[]; onSend: (text: string) => Promise<void>;
 export default function ChatPanel({ messages, onSend, disabled }: Props) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
-  const end = useRef<HTMLDivElement>(null);
+  const box = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    end.current?.scrollIntoView({ behavior: "smooth" });
+    const el = box.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [messages.length]);
 
   async function submit(e: FormEvent) {
@@ -27,9 +28,9 @@ export default function ChatPanel({ messages, onSend, disabled }: Props) {
   }
 
   return (
-    <div className="card chat">
-      <h3>Ask the assistant</h3>
-      <div className="msgs">
+    <div className="sheet chat">
+      <h3>Change the plan</h3>
+      <div className="msgs" ref={box}>
         {messages.length === 0 && (
           <p className="muted small">
             Try: &ldquo;move my workout to 7am&rdquo;, &ldquo;skip lunch&rdquo;, &ldquo;add call mum at 6pm for 20
@@ -41,7 +42,6 @@ export default function ChatPanel({ messages, onSend, disabled }: Props) {
             {m.content}
           </div>
         ))}
-        <div ref={end} />
       </div>
       <form onSubmit={submit}>
         <input
@@ -51,7 +51,7 @@ export default function ChatPanel({ messages, onSend, disabled }: Props) {
           disabled={disabled || busy}
         />
         <button className="primary" disabled={disabled || busy}>
-          {busy ? "…" : "Send"}
+          {busy ? "Sending" : "Send"}
         </button>
       </form>
     </div>
