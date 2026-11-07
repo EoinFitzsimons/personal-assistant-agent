@@ -7,7 +7,7 @@ import ChatPanel from "@/components/ChatPanel";
 import Nav from "@/components/Nav";
 import Skeleton from "@/components/Skeleton";
 import Timeline from "@/components/Timeline";
-import { api, ChatMessage, getToken, Plan, PlanItem, PlanSummary } from "@/lib/api";
+import { api, ApiError, ChatMessage, getToken, Plan, PlanItem, PlanSummary } from "@/lib/api";
 import { dayLabel, hhmm, longDate } from "@/lib/labels";
 
 const STATUS_TEXT: Record<string, string> = {
@@ -92,11 +92,17 @@ export default function WeekPage() {
     }
   }
 
-  const [confirming, setConfirming] = useState(false);
+  const [confirm, setConfirm] = useState<string | null>(null);
   const start = (replace = false) =>
     run(async () => {
-      setConfirming(false);
-      setPlan(await api<Plan>(`/plans${replace ? "?replace=true" : ""}`, { method: "POST" }));
+      setConfirm(null);
+      try {
+        setPlan(await api<Plan>(`/plans${replace ? "?replace=true" : ""}`, { method: "POST" }));
+      } catch (e) {
+        // The server knows about progress on an older ready plan even when a failed re-plan is on screen.
+        if (!replace && e instanceof ApiError && e.status === 409) setConfirm(e.message);
+        else throw e;
+      }
     });
   const patch = (item: PlanItem, body: object) =>
     run(async () =>
@@ -123,7 +129,7 @@ export default function WeekPage() {
   const proposed = items.filter((i) => i.status === "proposed").length;
 
   const progress = plan?.status === "ready" && dayLabel(plan.date) === "Tomorrow" ? progressOf(plan) : [];
-  const replan = () => (progress.length ? setConfirming(true) : start());
+  const replan = () => (progress.length ? setConfirm(`You\u2019ll lose ${progress.join(", ")}.`) : start());
   const past = history.filter((h) => h.id !== plan?.id && h.status === "ready");
   const busy = plan?.status === "gathering" || plan?.status === "planning";
 
@@ -139,21 +145,21 @@ export default function WeekPage() {
           </div>
           <div className="head-actions">
             {ready && proposed > 0 && <button onClick={approveAll}>Keep all suggestions ({proposed})</button>}
-            <button className="primary" onClick={replan} disabled={busy || confirming}>
+            <button className="primary" onClick={replan} disabled={busy || confirm !== null}>
               {plan ? "Re-plan tomorrow" : "Plan tomorrow"}
             </button>
           </div>
         </div>
-        {confirming && (
+        {confirm !== null && (
           <section className="sheet confirm" role="alert">
             <p>
-              Re-planning replaces tomorrow&apos;s plan. You&apos;ll lose {progress.join(", ")}.
+              Re-planning replaces tomorrow&apos;s plan. {confirm}
             </p>
             <div className="row">
               <button className="primary" onClick={() => start(true)}>
                 Replace the plan
               </button>
-              <button onClick={() => setConfirming(false)}>Keep my progress</button>
+              <button onClick={() => setConfirm(null)}>Keep my progress</button>
             </div>
           </section>
         )}
