@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import ItemRow from "@/components/ItemRow";
 import Nav from "@/components/Nav";
@@ -10,7 +10,12 @@ import { usePlanLoader } from "@/components/usePlanLoader";
 import { api, focusPlan, getToken, patchItem, Plan, PlanItem, PlanSummary } from "@/lib/api";
 import { longDate, timed } from "@/lib/labels";
 
-function ReviewBody({ planId }: { planId: string | null }) {
+type Show = "done" | "skipped" | "open";
+const SHOWS: Show[] = ["done", "skipped", "open"];
+
+type BodyProps = { planId: string | null; show: Show | null; onShow: (show: Show | null) => void };
+
+function ReviewBody({ planId, show, onShow }: BodyProps) {
   const load = useCallback(() => (planId ? api<Plan>(`/plans/${planId}`) : focusPlan()), [planId]);
   const { plan, setPlan, loaded, error, setError } = usePlanLoader(load);
   const [history, setHistory] = useState<PlanSummary[]>([]);
@@ -52,8 +57,11 @@ function ReviewBody({ planId }: { planId: string | null }) {
     : 0;
   const past = history.filter((h) => h.id !== plan?.id && h.status === "ready");
 
-  function section(title: string, items: PlanItem[]) {
-    if (items.length === 0) return null;
+  function section(key: Show, title: string, items: PlanItem[]) {
+    if (show && show !== key) return null;
+    if (items.length === 0) {
+      return show ? <p className="muted section-empty">Nothing {key === "open" ? "left to mark" : key} yet.</p> : null;
+    }
     return (
       <section>
         <h3 className="list-head">{title}</h3>
@@ -82,29 +90,37 @@ function ReviewBody({ planId }: { planId: string | null }) {
       )}
       {ready && (
         <>
-          <dl className="tally">
-            <div>
-              <dt>Done</dt>
-              <dd>{done.length}</dd>
-            </div>
-            <div>
-              <dt>Skipped</dt>
-              <dd>{skipped.length}</dd>
-            </div>
-            <div>
-              <dt>Not marked</dt>
-              <dd>{open.length}</dd>
-            </div>
-          </dl>
+          <div className="tally" role="group" aria-label="Show blocks by outcome">
+            {(
+              [
+                ["done", "Done", done.length],
+                ["skipped", "Skipped", skipped.length],
+                ["open", "Not marked", open.length],
+              ] as const
+            ).map(([key, label, count]) => (
+              <button key={key} aria-pressed={show === key} onClick={() => onShow(show === key ? null : key)}>
+                <span className="tally-label">{label}</span>
+                <span className="tally-count fig">{count}</span>
+              </button>
+            ))}
+          </div>
+          {show && (
+            <p className="muted small">
+              Showing {show === "open" ? "not marked" : show} blocks.{" "}
+              <button className="quiet" onClick={() => onShow(null)}>
+                Show all
+              </button>
+            </p>
+          )}
           {promisesOpen > 0 && (
             <p className="note">
               {promisesOpen} {promisesOpen === 1 ? "promise is" : "promises are"} still open.{" "}
               <Link href="/promises">See promises</Link>
             </p>
           )}
-          {section("Not marked yet", open)}
-          {section("Done", done)}
-          {section("Skipped", skipped)}
+          {section("open", "Not marked yet", open)}
+          {section("done", "Done", done)}
+          {section("skipped", "Skipped", skipped)}
           <section className="sheet review-note">
             <label>
               One line about the day
@@ -150,8 +166,21 @@ function ReviewBody({ planId }: { planId: string | null }) {
 }
 
 function ReviewInner() {
-  const planId = useSearchParams().get("plan");
-  return <ReviewBody key={planId ?? "focus"} planId={planId} />;
+  const params = useSearchParams();
+  const router = useRouter();
+  const planId = params.get("plan");
+  const raw = params.get("show");
+  const show = SHOWS.find((s) => s === raw) ?? null;
+
+  function onShow(next: Show | null) {
+    const q = new URLSearchParams(params.toString());
+    if (next) q.set("show", next);
+    else q.delete("show");
+    const qs = q.toString();
+    router.replace(qs ? `/review?${qs}` : "/review", { scroll: false });
+  }
+
+  return <ReviewBody key={planId ?? "focus"} planId={planId} show={show} onShow={onShow} />;
 }
 
 export default function ReviewPage() {
