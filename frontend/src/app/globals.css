@@ -166,7 +166,7 @@ label.check input { margin-top: var(--space-2xs); }
 .tally button[aria-pressed="true"] { background: var(--color-paper-3); box-shadow: var(--press-groove); transform: none; }
 .tally-label { color: var(--color-muted); font-size: var(--text-sm); }
 .tally button[aria-pressed="true"] .tally-label { color: var(--color-ink); }
-.tally-count { color: var(--color-ink); font-size: var(--text-2xl); }
+.tally-count { color: var(--color-ink); font-size: var(--text-2xl); font-variant-numeric: tabular-nums; }
 .section-empty { margin-top: var(--space-lg); }
 .review-note { margin-top: var(--space-xl); }
 
